@@ -3,19 +3,10 @@ const gql = require('graphql-tag');
 const mongoose = require('mongoose');
 require('dotenv').config()
 
+const typeDefs = require('../graphql/typeDefs')
+const resolvers = require('../graphql/resolvers/index')
 
 
-const typeDefs = gql`
-    type Query{
-        hello: String!
-    }
-`
-
-const resolvers = {
-    Query: {
-        hello: () => 'Hello World!'
-    }
-}
 
 
 const server = new ApolloServer({
