@@ -1,13 +1,15 @@
-import {
-  ApolloServerPluginDrainHttpServer,
-  ApolloServerPluginLandingPageLocalDefault,
-} from "apollo-server-core";
-import express from "express";
-import http from "http";
 const { ApolloServer } = require("apollo-server-express");
-const gql = require("graphql-tag");
 const mongoose = require("mongoose");
 require("dotenv").config();
+const {
+  ApolloServerPluginDrainHttpServer,
+  ApolloServerPluginLandingPageLocalDefault,
+} = require("apollo-server-core");
+const express = require("express");
+const http = require("http");
+const { makeExecutableSchema } = require("@graphql-tools/schema");
+const { WebSocketServer } = require("ws");
+const { useServer } = require("graphql-ws/lib/use/ws");
 
 const typeDefs = require("../graphql/typeDefs");
 const resolvers = require("../graphql/resolvers/index");
@@ -20,6 +22,20 @@ async function startApolloServer(typeDefs, resolvers) {
   // enabling our servers to shut down gracefully.
   const httpServer = http.createServer(app);
 
+  // Create the schema, which will be used separately by ApolloServer and
+  // the WebSocket server.
+  const schema = makeExecutableSchema({ typeDefs, resolvers });
+
+  const wsServer = new WebSocketServer({
+    // This is the `httpServer` we created in a previous step.
+    server: httpServer,
+    path: "/",
+  });
+
+  // Hand in the schema we just created and have the
+  // WebSocketServer start listening.
+  const serverCleanup = useServer({ schema }, wsServer);
+
   // Same ApolloServer initialization as before, plus the drain plugin
   // for our httpServer.
   const server = new ApolloServer({
@@ -28,25 +44,33 @@ async function startApolloServer(typeDefs, resolvers) {
     csrfPrevention: true,
     cache: "bounded",
     plugins: [
+      // Proper shutdown for the HTTP server.
       ApolloServerPluginDrainHttpServer({ httpServer }),
+
+      // Proper shutdown for the WebSocket server.
+      {
+        async serverWillStart() {
+          return {
+            async drainServer() {
+              await serverCleanup.dispose();
+            },
+          };
+        },
+      },
       ApolloServerPluginLandingPageLocalDefault({ embed: true }),
     ],
+    context: ({ req }) => ({ req }),
   });
 
   // More required logic for integrating with Express
   await server.start();
-  server.applyMiddleware({
-    app,
-
-    // By default, apollo-server hosts its GraphQL endpoint at the
-    // server root. However, *other* Apollo Server packages host it at
-    // /graphql. Optionally provide this to match apollo-server.
-    path: "/",
-  });
+  server.applyMiddleware({ app, path: "/" });
 
   // Modified server startup
-  await new Promise((resolve) => httpServer.listen({ port: 4000 }, resolve));
-  console.log(`🚀 Server ready at http://localhost:4000${server.graphqlPath}`);
+  await new Promise((resolve) =>
+    httpServer.listen({ port: process.env.PORT }, resolve)
+  );
+  return server;
 }
 
 // const server = new ApolloServer({
@@ -59,8 +83,10 @@ mongoose
   .connect(process.env.MONGO_URI)
   .then(() => {
     console.log("Mongodb connected!");
-    return server.listen({ port: 5000 });
+    return startApolloServer(typeDefs, resolvers);
   })
   .then((res) => {
-    console.log(`Server running at ${res.url}`);
+    console.log(
+      `🚀 Server ready at http://localhost:${process.env.PORT}${res.graphqlPath}`
+    );
   });
