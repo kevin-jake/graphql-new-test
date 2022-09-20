@@ -1,6 +1,6 @@
 import React, { useContext } from "react";
-import { useQuery, gql } from "@apollo/client";
-import { Grid } from "semantic-ui-react";
+import { useQuery } from "@apollo/client";
+import { Grid, Transition } from "semantic-ui-react";
 
 import PostCards from "../components/PostCards";
 import { AuthContext } from "../context/auth";
@@ -31,12 +31,14 @@ const Home = () => {
         {loading ? (
           <h1>Loading posts...</h1>
         ) : (
-          posts.length > 0 &&
-          posts.map((post) => (
-            <Grid.Column key={post.id} style={{ marginBottom: 20 }}>
-              <PostCards post={post} />
-            </Grid.Column>
-          ))
+          <Transition.Group>
+            {posts.length > 0 &&
+              posts.map((post) => (
+                <Grid.Column key={post.id} style={{ marginBottom: 20 }}>
+                  <PostCards post={post} />
+                </Grid.Column>
+              ))}
+          </Transition.Group>
         )}
       </Grid.Row>
       <Grid.Row></Grid.Row>
