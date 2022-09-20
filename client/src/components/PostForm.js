@@ -64,11 +64,13 @@ const CREATE_POST = gql`
       body
       createdAt
       username
+      likeCount
       likes {
         id
         username
         createdAt
       }
+      commentCount
       comments {
         id
         body
